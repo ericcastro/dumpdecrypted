@@ -33,6 +33,8 @@ DISCLAIMER: This tool is only meant for security research purposes, not for appl
 #include <mach-o/fat.h>
 #include <mach-o/loader.h>
 #include <mach-o/dyld.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 
 #define swap32(value) (((value & 0xFF000000) >> 24) | ((value & 0x00FF0000) >> 8) | ((value & 0x0000FF00) << 8) | ((value & 0x000000FF) << 24) )
 
@@ -46,6 +48,8 @@ void dumptofile(const char *path, const struct mach_header *mh) {
 	unsigned int fileoffs = 0, off_cryptid = 0, restsize;
 	int i,fd,outfd,r,n,toread;
 	char *tmp;
+	char is_embedded_framework = 0;
+	char framework_path[4096];
 
 	if (realpath(path, rpath) == NULL) {
 		strlcpy(rpath, path, sizeof(rpath));
@@ -59,6 +63,37 @@ void dumptofile(const char *path, const struct mach_header *mh) {
 		_exit(1);
 	} else {
 		printf("[+] Dumping %s\n", tmp+1);
+	}
+
+	/* if it's a framework, extract the .framework name (can be different from basename if Info.plist says so */
+	if (strstr(rpath, ".framework") && strstr(rpath, ".app"))
+	{
+		char subrpath[4096];
+		int subsize = strlen(rpath) - strlen(tmp+1) - 1;
+		memcpy(subrpath, rpath, subsize);
+		subrpath[subsize] = '\0';
+		printf("%s\n", subrpath);
+		
+		char *tmp2 = strrchr(subrpath, '/');
+		printf("\n\n");
+		if (tmp2 == NULL) {
+			printf("[-] Unexpected error with framework filename.\n");
+			_exit(1);
+		} else {
+			printf("[+] Framework name is %s\n", tmp2+1);
+		}
+
+		framework_path[0] = '\0';
+		strcat(framework_path, "Frameworks/");
+		strcat(framework_path, tmp2+1);
+
+		mkdir("Frameworks", 0644);
+		mkdir(framework_path, 0644);
+		
+		strcat(framework_path, "/");
+		strcat(framework_path, tmp+1);
+
+		is_embedded_framework = 1;
 	}
 
 	/* detect if this is a arm64 binary */
@@ -125,7 +160,10 @@ void dumptofile(const char *path, const struct mach_header *mh) {
 				_exit(1);
 			}
 
-			strlcpy(npath, tmp+1, sizeof(npath));
+			if (is_embedded_framework)
+				strlcpy(npath, framework_path, sizeof(npath));
+			else
+				strlcpy(npath, tmp+1, sizeof(npath));
 			strlcat(npath, ".decrypted", sizeof(npath));
 			strlcpy(buffer, npath, sizeof(buffer));
 
