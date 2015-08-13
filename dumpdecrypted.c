@@ -35,8 +35,13 @@ DISCLAIMER: This tool is only meant for security research purposes, not for appl
 #include <mach-o/dyld.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <time.h>
+#include <dispatch/dispatch.h>
 
 #define swap32(value) (((value & 0xFF000000) >> 24) | ((value & 0x00FF0000) >> 8) | ((value & 0x0000FF00) << 8) | ((value & 0x000000FF) << 24) )
+
+static time_t last_finished_dump;
+static char dump_in_progress;
 
 void dumptofile(const char *path, const struct mach_header *mh) {
 	struct load_command *lc;
@@ -50,6 +55,8 @@ void dumptofile(const char *path, const struct mach_header *mh) {
 	char *tmp;
 	char is_embedded_framework = 0;
 	char framework_path[4096];
+
+	dump_in_progress = 1;
 
 	if (realpath(path, rpath) == NULL) {
 		strlcpy(rpath, path, sizeof(rpath));
@@ -87,8 +94,8 @@ void dumptofile(const char *path, const struct mach_header *mh) {
 		strcat(framework_path, "Frameworks/");
 		strcat(framework_path, tmp2+1);
 
-		mkdir("Frameworks", 0644);
-		mkdir(framework_path, 0644);
+		mkdir("Frameworks", 0755);
+		mkdir(framework_path, 0755);
 		
 		strcat(framework_path, "/");
 		strcat(framework_path, tmp+1);
@@ -260,11 +267,17 @@ void dumptofile(const char *path, const struct mach_header *mh) {
 			close(fd);
 			printf("[+] Closing dump file\n");
 			close(outfd);
+
+			time(&last_finished_dump);
+			dump_in_progress = 0;
+			return;
 		}
 		
 		lc = (struct load_command *)((unsigned char *)lc+lc->cmdsize);		
 	}
 	printf("[-] This mach-o file is not encrypted. Nothing was decrypted.\n");
+	time(&last_finished_dump);
+	dump_in_progress = 0;
 }
 
 static void image_added(const struct mach_header *mh, intptr_t slide) {
@@ -273,9 +286,28 @@ static void image_added(const struct mach_header *mh, intptr_t slide) {
 	dumptofile(image_info.dli_fname, mh);
 }
 
+static void dump_watch_run()
+{
+	if (!last_finished_dump) return;
+
+	if (dump_in_progress || (time(NULL) - last_finished_dump < 0.5))
+	{
+		dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.1 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+    		dump_watch_run();
+		});
+	}
+	else
+	{
+		printf("[·] Done dumping. Bye.\n");
+		exit(0);
+	}
+	
+}
 __attribute__((constructor))
 static void dumpexecutable() {
 	printf("mach-o decryption dumper\n\n");
 	printf("DISCLAIMER: This tool is only meant for security research purposes, not for application crackers.");
 	_dyld_register_func_for_add_image(&image_added);
+
+	dump_watch_run();
 }

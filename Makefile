@@ -7,7 +7,7 @@ GCC_BASE = $(GCC_BIN) -Os $(CFLAGS) -Wimplicit -isysroot $(SDK) -F$(SDK)/System/
 
 all: dumpdecrypted.dylib
 
-dumpdecrypted.dylib: dumpdecrypted.o 
+dumpdecrypted.dylib: dumpdecrypted.o
 	$(GCC_UNIVERSAL) -dynamiclib -o $@ $^
 
 %.o: %.c
