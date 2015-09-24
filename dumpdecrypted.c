@@ -37,6 +37,24 @@ DISCLAIMER: This tool is only meant for security research purposes, not for appl
 #include <sys/types.h>
 #include <time.h>
 #include <dispatch/dispatch.h>
+#include <sys/types.h>
+#include <dirent.h>
+
+#include <ftw.h>
+#include <errno.h>
+
+#ifndef USE_FDS
+#define USE_FDS 15
+#endif
+
+struct ProgramVars
+{
+	const void*		mh;
+	int*			NXArgcPtr;
+	char***			NXArgvPtr;
+	char***			environPtr;
+	char**			__prognamePtr;
+};
 
 #define swap32(value) (((value & 0xFF000000) >> 24) | ((value & 0x00FF0000) >> 8) | ((value & 0x0000FF00) << 8) | ((value & 0x000000FF) << 24) )
 
@@ -280,12 +298,6 @@ void dumptofile(const char *path, const struct mach_header *mh) {
 	dump_in_progress = 0;
 }
 
-static void image_added(const struct mach_header *mh, intptr_t slide) {
-	Dl_info image_info;
-	int result = dladdr(mh, &image_info);
-	dumptofile(image_info.dli_fname, mh);
-}
-
 static void dump_watch_run()
 {
 	if (!last_finished_dump) return;
@@ -303,11 +315,76 @@ static void dump_watch_run()
 	}
 	
 }
+
+static void image_added(const struct mach_header *mh, intptr_t slide) {
+	Dl_info image_info;
+	int result = dladdr(mh, &image_info);
+	dumptofile(image_info.dli_fname, mh);
+}
+
+void split_path_file(char** p, char** f, char *pf) {
+    char *slash = pf, *next;
+    while ((next = strpbrk(slash + 1, "\\/"))) slash = next;
+    if (pf != slash) slash++;
+    *p = strndup(pf, slash - pf);
+    *f = strdup(slash);
+}
+
+int check_framework(const char *filepath, const struct stat *info,
+                const int typeflag, struct FTW *pathinfo)
+{
+	const double bytes = (double)info->st_size; /* Not exact if large! */
+
+	if (bytes < 4.0)
+		return 0;
+
+	int magic;
+	FILE *f = fopen(filepath, "r");
+	fread(&magic, sizeof(magic), 1, f);
+	fclose(f);
+
+	if (magic == 0xbebafeca)
+	{
+		dlopen(filepath, RTLD_LAZY);
+	}
+
+	return 0;
+
+}
+
+int scan_frameworks(const char *const dirpath)
+{
+    int result;
+
+    /* Invalid directory path? */
+    if (dirpath == NULL || *dirpath == '\0')
+        return errno = EINVAL;
+
+    result = nftw(dirpath, check_framework, USE_FDS, FTW_PHYS);
+    if (result >= 0)
+        errno = result;
+
+    return errno;
+}
+
 __attribute__((constructor))
-static void dumpexecutable() {
+static void dumpexecutable(int argc, const char* argv[], const char* envp[], const char* apple[], const struct ProgramVars* vars) {
 	printf("mach-o decryption dumper\n\n");
 	printf("DISCLAIMER: This tool is only meant for security research purposes, not for application crackers.");
 	_dyld_register_func_for_add_image(&image_added);
+
+	char *executable_path = (char *)argv[0];
+	char *dir;
+	char *filename;
+	char framework_path[4096];
+
+	split_path_file(&dir, &filename, executable_path);
+
+	framework_path[0] = '\0';
+	strcat(framework_path, dir);
+	strcat(framework_path, "Frameworks");
+
+	scan_frameworks(framework_path);
 
 	dump_watch_run();
 }
