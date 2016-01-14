@@ -3,12 +3,16 @@ GCC_UNIVERSAL=$(GCC_BASE) -arch armv7 -arch armv7s -arch arm64
 SDK=`xcrun --sdk iphoneos --show-sdk-path`
 
 CFLAGS = 
-GCC_BASE = $(GCC_BIN) -Os $(CFLAGS) -Wimplicit -isysroot $(SDK) -F$(SDK)/System/Library/Frameworks -F$(SDK)/System/Library/PrivateFrameworks
+LDFLAGS = 
+GCC_BASE = $(GCC_BIN) -Os $(CFLAGS) -Wimplicit -isysroot $(SDK) -F$(SDK)/System/Library/Frameworks -F$(SDK)/System/Library/PrivateFrameworks -lobjc
 
-all: dumpdecrypted.dylib
+all: dumpdecrypted.dylib dumpdecryptedf
 
 dumpdecrypted.dylib: dumpdecrypted.o
 	$(GCC_UNIVERSAL) -dynamiclib -o $@ $^
+
+dumpdecryptedf: dumpdecryptedf.o
+	$(GCC_UNIVERSAL) -o $@ $^
 
 %.o: %.c
 	$(GCC_UNIVERSAL) -c -o $@ $< 

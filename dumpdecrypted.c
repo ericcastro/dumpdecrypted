@@ -298,27 +298,23 @@ void dumptofile(const char *path, const struct mach_header *mh) {
 	dump_in_progress = 0;
 }
 
-static void dump_watch_run()
-{
-	if (!last_finished_dump) return;
-
-	if (dump_in_progress || (time(NULL) - last_finished_dump < 0.5))
-	{
-		dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.1 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-    		dump_watch_run();
-		});
-	}
-	else
-	{
-		printf("[·] Done dumping. Bye.\n");
-		exit(0);
-	}
-	
-}
 
 static void image_added(const struct mach_header *mh, intptr_t slide) {
 	Dl_info image_info;
 	int result = dladdr(mh, &image_info);
+	if (strstr(image_info.dli_fname,"/usr/lib/"))
+		return;
+
+	if (strstr(image_info.dli_fname,"/System/Library/Frameworks/"))
+		return;
+
+	if (strstr(image_info.dli_fname,"/System/Library/PrivateFrameworks/"))
+		return;
+
+	if (strstr(image_info.dli_fname,"libswift"))
+		return;
+
+	printf("%s\n",image_info.dli_fname);
 	dumptofile(image_info.dli_fname, mh);
 }
 
@@ -343,10 +339,8 @@ int check_framework(const char *filepath, const struct stat *info,
 	fread(&magic, sizeof(magic), 1, f);
 	fclose(f);
 
-	if (magic == 0xbebafeca)
-	{
+	if (magic == 0xbebafeca || magic == 0xfeedface || magic == 0xfeedfacf)
 		dlopen(filepath, RTLD_LAZY);
-	}
 
 	return 0;
 
@@ -369,8 +363,7 @@ int scan_frameworks(const char *const dirpath)
 
 __attribute__((constructor))
 static void dumpexecutable(int argc, const char* argv[], const char* envp[], const char* apple[], const struct ProgramVars* vars) {
-	printf("mach-o decryption dumper\n\n");
-	printf("DISCLAIMER: This tool is only meant for security research purposes, not for application crackers.");
+
 	_dyld_register_func_for_add_image(&image_added);
 
 	char *executable_path = (char *)argv[0];
@@ -385,6 +378,13 @@ static void dumpexecutable(int argc, const char* argv[], const char* envp[], con
 	strcat(framework_path, "Frameworks");
 
 	scan_frameworks(framework_path);
+	
+	while (dump_in_progress || (time(NULL) - last_finished_dump < 0.5))
+	{
+		sleep(1);
+	}
 
-	dump_watch_run();
+	printf("[·] Done dumping. Bye.\n");
+	exit(0);
+
 }
