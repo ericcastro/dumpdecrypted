@@ -6,13 +6,10 @@ CFLAGS =
 LDFLAGS = 
 GCC_BASE = $(GCC_BIN) -Os $(CFLAGS) -Wimplicit -isysroot $(SDK) -F$(SDK)/System/Library/Frameworks -F$(SDK)/System/Library/PrivateFrameworks -lobjc
 
-all: dumpdecrypted.dylib dumpdecryptedf
+all: dumpdecrypted.dylib
 
 dumpdecrypted.dylib: dumpdecrypted.o
 	$(GCC_UNIVERSAL) -dynamiclib -o $@ $^
-
-dumpdecryptedf: dumpdecryptedf.o
-	$(GCC_UNIVERSAL) -o $@ $^
 
 %.o: %.c
 	$(GCC_UNIVERSAL) -c -o $@ $< 
