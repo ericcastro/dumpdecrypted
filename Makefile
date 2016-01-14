@@ -4,7 +4,7 @@ SDK=`xcrun --sdk iphoneos --show-sdk-path`
 
 CFLAGS = 
 LDFLAGS = 
-GCC_BASE = $(GCC_BIN) -Os $(CFLAGS) -Wimplicit -isysroot $(SDK) -F$(SDK)/System/Library/Frameworks -F$(SDK)/System/Library/PrivateFrameworks -lobjc
+GCC_BASE = $(GCC_BIN) -Os $(CFLAGS) -Wimplicit -isysroot $(SDK) -F$(SDK)/System/Library/Frameworks -F$(SDK)/System/Library/PrivateFrameworks
 
 all: dumpdecrypted.dylib
 
